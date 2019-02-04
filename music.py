@@ -26,22 +26,25 @@ from scipy import pi
 
 if __name__ == "__main__" and __package__ is None:
     import sys
+
     sys.path.append('..')
     __package__ = "doamusic"
 from . import util
 from . import _music
+
 
 class Estimator:
     """
     A class to carry state for estimating direction of arrival (DOA) 
     with the Multiple SIgnal Classification algorithm.
     """
+
     def __init__(
-        self,
-        antennas,
-        covariance,
-        field_of_view=((0,pi),(-pi,pi)),
-        nsignals=None
+            self,
+            antennas,
+            covariance,
+            field_of_view=((0, pi), (-pi, pi)),
+            nsignals=None
     ):
         """
         Set up an Estimator, for making pseudospectrum plots and finding
@@ -72,17 +75,17 @@ class Estimator:
             covariance matrix.
         """
         # Accept and validate antennas.
-        self.antennas = np.array(antennas).astype(complex) * (2*pi)
+        self.antennas = np.array(antennas).astype(complex) * (2 * pi)
         self.numel = self.antennas.shape[0]
-        assert self.antennas.shape[1] == 3      # we are operating in R3
+        assert self.antennas.shape[1] == 3  # we are operating in R3
         # Accept and validate covariance.
         self.covar = np.array(covariance)
-        assert self.covar.shape == (self.numel,self.numel)
+        assert self.covar.shape == (self.numel, self.numel)
         # Unpack field of view
-        self.thlo,self.thhi = field_of_view[0][0],field_of_view[0][1]
-        self.phlo,self.phhi = field_of_view[1][0],field_of_view[1][1]
+        self.thlo, self.thhi = field_of_view[0][0], field_of_view[0][1]
+        self.phlo, self.phhi = field_of_view[1][0], field_of_view[1][1]
 
-        #Get the sorted eigenstructure
+        # Get the sorted eigenstructure
         self.eigval, self.eigvec = util.eigsort(linalg.eig(covariance))
 
         # Try to guess the number of incident signals, if unspecified
@@ -95,16 +98,16 @@ class Estimator:
             self.noisedim = sp.diff(shaped).argmax() + 1
             self.nsignals = self.numel - self.noisedim
 
-        #slice the noise space
-        self.noisespace = self.eigvec[:,:self.noisedim]
-        self.sigspace = self.eigvec[:,self.noisedim:]
-        #DEBUG print("Noise space dimension: {}".format(self.noisespace.shape))
+        # slice the noise space
+        self.noisespace = self.eigvec[:, :self.noisedim]
+        self.sigspace = self.eigvec[:, self.noisedim:]
+        # DEBUG print("Noise space dimension: {}".format(self.noisespace.shape))
 
         # Calculate the noise metric used to evaluate pmusic, to avoid
         # repetition
         self.metric = sp.atleast_2d(
-                    self.noisespace.dot( self.noisespace.T.conj() )
-                 ).astype(complex)
+            self.noisespace.dot(self.noisespace.T.conj())
+        ).astype(complex)
 
     def eigplot():
         """
@@ -114,7 +117,7 @@ class Estimator:
         """
         pass
 
-    def spectrum(self,shape,method=_music.spectrum):
+    def spectrum(self, shape, method=_music.spectrum):
         """
         Generate a MUSIC pseudospectrum on the estimator's domain. The result
         is a theta_sz x phi_sz real numpy.ndarray. The domain is a closed
@@ -133,26 +136,26 @@ class Estimator:
         # evaluation.
 
         # Extract shape argument
-        theta_sz,phi_sz = shape
+        theta_sz, phi_sz = shape
 
         # precalculate static arguments as comlpex double and prepare output
         # array
-        result = np.empty((theta_sz,phi_sz))
+        result = np.empty((theta_sz, phi_sz))
 
         # step sizes
-        thstep = (self.thhi-self.thlo)/(theta_sz-1)
-        phstep = (self.phhi-self.phlo)/(phi_sz-1)
+        thstep = (self.thhi - self.thlo) / (theta_sz - 1)
+        phstep = (self.phhi - self.phlo) / (phi_sz - 1)
 
         method(
-           self.metric,
-           self.antennas,
-           result,
-           self.thlo,thstep,theta_sz,
-           self.phlo,phstep,phi_sz
+            self.metric,
+            self.antennas,
+            result,
+            self.thlo, thstep, theta_sz,
+            self.phlo, phstep, phi_sz
         )
         return result
 
-    def doasearch(self,max_iterations=2**8,tol=pi/2**16):
+    def doasearch(self, max_iterations=2 ** 8, tol=pi / 2 ** 16):
         """
         Find directions of arrival within specified tolerance.
         """
@@ -165,38 +168,37 @@ class Estimator:
             # Pick a random starting point on the sphere by taking the theta
             # and phi coordinates of a random sample from the normal
             # distribution (which is spherically symmetric).
-            thstart,phstart = util.cart2sph(sp.randn(3))[1:]
-            phstart = 0 + sp.rand()*pi
-            maxval,maxpoint = _music.hillclimb(
+            thstart, phstart = util.cart2sph(sp.randn(3))[1:]
+            phstart = 0 + sp.rand() * pi
+            maxval, maxpoint = _music.hillclimb(
                 self.metric,
                 self.antennas,
-                thstart,phstart,
-                2**(-80)
+                thstart, phstart,
+                2 ** (-80)
             )
-            for val,point in out:
+            for val, point in out:
                 # Check distance from ones we've already found.
                 diff = sp.array(point) - sp.array(maxpoint)
-                if sp.sqrt(sp.dot(diff,diff)) < 2*tol:
+                if sp.sqrt(sp.dot(diff, diff)) < 2 * tol:
                     break
             else:
                 # It's not one of the ones we've already found.
-                out.append((maxval,maxpoint))
+                out.append((maxval, maxpoint))
         # Sort the signals by descending pmuisc amplitude
         out.sort(key=lambda x: x[0], reverse=True)
         # Filter the points outside the domain.
-        out = [ point for val,point in out 
-            if (
-                point[0] < self.thhi and
-                point[0] > self.thlo and
-                point[1] < self.phhi and
-                point[1] > self.phlo
-            )
-        ]
+        out = [point for val, point in out
+               if (
+                       point[0] < self.thhi and
+                       point[0] > self.thlo and
+                       point[1] < self.phhi and
+                       point[1] > self.phlo
+               )
+               ]
         # Take the signals biggest (which should hopefully discard aliases).
         out = out[:self.nsignals]
-        #DEBUG: print("Iterations: {}".format(iterations))
+        # DEBUG: print("Iterations: {}".format(iterations))
         return out
-
 
 
 def covar(samples):
@@ -219,26 +221,28 @@ def covar(samples):
             Estimator.
     """
     samples = sp.asmatrix(samples)
-    return ( (samples.H * samples) / samples.shape[0] )
+    return ((samples.H * samples) / samples.shape[0])
 
-def _pmusic(metric,antennas,theta,phi):
-    steer = sp.exp( 1j*antennas.dot(-util.aoa2prop_scalar(theta,phi)) )
+
+def _pmusic(metric, antennas, theta, phi):
+    steer = sp.exp(1j * antennas.dot(-util.aoa2prop_scalar(theta, phi)))
     return 1.0 / steer.conj().dot(metric).dot(steer).real
 
+
 def _spectrum(
-    metric,
-    antennas,
-    out,
-    thlo,thstep,thsz,
-    phlo,phstep,phsz
+        metric,
+        antennas,
+        out,
+        thlo, thstep, thsz,
+        phlo, phstep, phsz
 ):
     # Lower-level spectrum calculator with preprocessed arguments and 
     # pass-by-reference output array, for easier implementation with
     # cython and being farmed out to multiple processes. (The problem is
     # embarassingly parallel.
-    assert out.shape == (thsz,phsz)
+    assert out.shape == (thsz, phsz)
     for i in range(thsz):
-        th = thlo + i*thstep
+        th = thlo + i * thstep
         for j in range(phsz):
-            ph = phlo + j*phstep
-            out[i,j] = _pmusic(metric,antennas,th,ph)
+            ph = phlo + j * phstep
+            out[i, j] = _pmusic(metric, antennas, th, ph)
