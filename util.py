@@ -130,10 +130,20 @@ def aoa_diff_rad(aoa_a, aoa_b):
     return sp.arccos(sp.dot(cart_a, cart_b))
 
 
-def antenna_array(n_antennas, wavelength, disposition="linear"):
-    if disposition == "linear":
-        x = np.linspace(-wavelength / 4, wavelength / 4, n_antennas)
+def antenna_array(n_antennas, disposition="linear"):
+    """
+    Generate a simple antenna array configuration
+    :param n_antennas: Number of antennas
+    :param disposition: disposition type. Choices are linear or circular
+    :return:
+    """
+    if disposition == "linear":  # along X axis
+        x = np.linspace(-1 / 4, 1 / 4, n_antennas)
         y, z = np.zeros_like(x), np.zeros_like(x)
+    elif disposition == "circular":  # aligned on the XY plane
+        x = 0.25*np.exp(1j * np.linspace(0, np.pi * 2, n_antennas + 1)[:-1])
+        x, y = np.real(x), np.imag(x)
+        z = np.zeros_like(x)
     else:
         raise ValueError("Not supported disposition: %s" % disposition)
     return np.array([x, y, z]).T
